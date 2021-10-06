@@ -430,10 +430,17 @@ include file = !quote(!concat(!unquote(!outdir),"\",!intvar,"_Recodes.txt")).
 include file = !quote(!concat(!unquote(!outdir),"\",!intvar,"_Check.txt")).
 !doend
 !ifend
+
 save outfile = !quote(!concat(!unquote(!outdir),"\",!outfile,"_Contrasts.sav"))
   / drop = k !do !c !in (!catvar)  !concat(!c,"_n")                  !doend
              !do !u !in (!usecrit) !concat(!u,"_n") !concat(!u,"_x") !doend
              !do !i !in (!impmean) !concat(!i,"_n") !concat(!i,"_x") !doend.
+save translate outfile = !quote(!concat(!unquote(!outdir),"\",!outfile,"_Contrasts.csv"))
+  / drop = k !do !c !in (!catvar)  !concat(!c,"_n")                  !doend
+             !do !u !in (!usecrit) !concat(!u,"_n") !concat(!u,"_x") !doend
+             !do !i !in (!impmean) !concat(!i,"_n") !concat(!i,"_x") !doend
+  / type = csv / fieldnames / replace.
+
 
 
 * Create list of UseCrit and ImpMean variables.
@@ -468,7 +475,7 @@ add files
  !if (!ImpMean !ne !null) !then / file = !quote(!concat(!unquote(!outdir),"\",!outfile,"_ImpMeanVars.sav")) !ifend 
  !if (!CatVars !ne !null) !then / file = !quote(!concat(!unquote(!outdir),"\",!outfile,"_CatVars.sav"))     !ifend .
 save outfile = !quote(!concat(!unquote(!outdir),"\",!outfile,"_RecodedVars.sav")).
-save translate outflie = !quote(!concat(!unquote(!outdir),"\",!outfile,"_RecodedVars.csv"))
+save translate outfile = !quote(!concat(!unquote(!outdir),"\",!outfile,"_RecodedVars.csv"))
   / type = csv / fieldnames / replace.
 
 * Compile the list of new interaction variables.
@@ -488,7 +495,7 @@ save translate outfile = !quote(!concat(!unquote(!outdir),"\",!outfile,"_Interac
 !ifend
 
 output save 
-  outfile= !quote(!concat(!unquote(!outdir),"\",!outfile,"_Contrasts.spv"))
+  outfile= !quote(!concat(!unquote(!outdir),"\",!outfile,"_Output.spv"))
   lock = no.
 
 new file.
