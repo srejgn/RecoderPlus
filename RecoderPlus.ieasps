@@ -23,6 +23,7 @@ define !RecoderPlus
      outfile   = !charend('/') !default("")  /
      SelCrit   = !charend('/') !default("")  /
      wgtvar    = !charend('/') !default("")  /
+     IDVars    = !charend('/') !default("")  /
      CatVars   = !charend('/') !default("")  /
      ConType   = !charend('/') !defualt("D") /
      IntVarsA  = !charend('/') !default("")  /
@@ -61,7 +62,8 @@ OMS  /SELECT ALL
      /IF COMMANDS=['Alter Type' 'Variables to Cases' 'Cases to Variables']
      /DESTINATION VIEWER=NO.
 
-get file = !quote(!concat(!unquote(!indir),"\",!infile,".sav")).
+get file = !quote(!concat(!unquote(!indir),"\",!infile,".sav"))
+  / keep = !idvars !byvars !wgtvar !catvars !impmean !usecrit !critvar .
 compute k = 1.
 compute CaseSeq = $casenum.
 
@@ -387,7 +389,7 @@ compute VarNameA = !quote(!AVar).
 compute VarNameB = !quote(!BVar).
 compute NInteract = 1.
 compute IntVar = !quote(!concat(!intvar,"_1")).
-compute chkcode = " ".
+compute chkcode = "* None. ".
 save outfile = !quote(!concat(!unquote(!outdir),"\",!intvar,".sav")) / drop = chkcode.
 write outfile = !quote(!concat(!unquote(!outdir),"\",!intvar,"_Recodes.txt"))
  / RecLine1 .
@@ -426,7 +428,7 @@ save outfile = !quote(!concat(!unquote(!outdir),"\",!IntVar,".sav"))
 write outfile = !quote(!concat(!unquote(!outdir),"\",!intvar,"_Recodes.txt"))
  / RecLine1 .
 write outfile = !quote(!concat(!unquote(!outdir),"\",!intvar,"_Check.txt"))
- / " " .
+ / "* None. " .
 execute.
 !ifend
 !ifend
@@ -474,16 +476,16 @@ include file = !quote(!concat(!unquote(!outdir),"\",!intvar,"_Check.txt")).
 !doend
 !ifend
 
+sort cases by CaseSeq.
 save outfile = !quote(!concat(!unquote(!outdir),"\",!outfile,"_Contrasts.sav"))
-  / drop = k !do !c !in (!catvar)  !concat(!c,"_n")                  !doend
-             !do !u !in (!usecrit) !concat(!u,"_n") !concat(!u,"_x") !doend
-             !do !i !in (!impmean) !concat(!i,"_n") !concat(!i,"_x") !doend.
+  / drop = k !do !c !in (!catvars) !concat(!c,"_n")                  !doend !catvars
+             !do !u !in (!usecrit) !concat(!u,"_n") !concat(!u,"_x") !doend !usecrit !critvar
+             !do !i !in (!impmean) !concat(!i,"_n") !concat(!i,"_x") !doend !impmean . 
 save translate outfile = !quote(!concat(!unquote(!outdir),"\",!outfile,"_Contrasts.csv"))
-  / drop = k !do !c !in (!catvar)  !concat(!c,"_n")                  !doend
-             !do !u !in (!usecrit) !concat(!u,"_n") !concat(!u,"_x") !doend
-             !do !i !in (!impmean) !concat(!i,"_n") !concat(!i,"_x") !doend
-  / type = csv / fieldnames / replace.
-
+  / drop = k !do !c !in (!catvars) !concat(!c,"_n")                  !doend !catvars
+             !do !u !in (!usecrit) !concat(!u,"_n") !concat(!u,"_x") !doend !usecrit !critvar 
+             !do !i !in (!impmean) !concat(!i,"_n") !concat(!i,"_x") !doend !impmean
+  / type = csv / fieldnames / replace / encoding = 'LOCALE'.
 
 
 * Create list of UseCrit and ImpMean variables.
@@ -519,7 +521,7 @@ add files
  !if (!CatVars !ne !null) !then / file = !quote(!concat(!unquote(!outdir),"\",!outfile,"_CatVars.sav"))     !ifend .
 save outfile = !quote(!concat(!unquote(!outdir),"\",!outfile,"_RecodedVars.sav")).
 save translate outfile = !quote(!concat(!unquote(!outdir),"\",!outfile,"_RecodedVars.csv"))
-  / type = csv / fieldnames / replace.
+  / type = csv / fieldnames / replace / encoding = 'LOCALE'.
 
 * Compile the list of new interaction variables.
 !if (!IntVec !ne !null) !then
@@ -530,11 +532,11 @@ add files
   / file = !quote(!concat(!unquote(!outdir),"\",!intvar,".sav")).
 !doend
 execute.
-save outifle = !quote(!concat(!unquote(!outdir),"\",!outfile,"_Interactions.sav"))
-  / keep = VarNameA VarNameB GroupA GroupB IntVar recline1 recline2 NInteract IntSeq.
+save outifle = !quote(!concat(!unquote(!outdir),"\",!outfile,"_Interactions.sav")).
+*  / keep = VarNameA VarNameB GroupA GroupB IntVar recline1 recline2 NInteract IntSeq.
 get file = !quote(!concat(!unquote(!outdir),"\",!outfile,"_Interactions.sav")).
 save translate outfile = !quote(!concat(!unquote(!outdir),"\",!outfile,"_Interactions.csv"))
-  / type = csv / fieldnames / replace.
+  / type = csv / fieldnames / replace / encoding = 'LOCALE'.
 !ifend
 
 output save 
