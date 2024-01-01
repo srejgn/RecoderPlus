@@ -25,7 +25,6 @@ define !RecoderPlus
      wgtvar    = !charend('/') !default("")  /
      IDVars    = !charend('/') !default("")  /
      vfile     = !charend('/') !default("")  /
-     sheet     = !charend('/') !default("")  /
      CatVars   = !charend('/') !default("")  /
      ConType   = !charend('/') !defualt("D") /
      IntVarsA  = !charend('/') !default("")  /
@@ -35,7 +34,7 @@ define !RecoderPlus
      UseCrit   = !charend('/') !default("")  /
      Critvar   = !charend('/') !default("")  /
      KeepVars  = !charend('/') !default("")  /
-     LOO       = !charend('/') !default("N") /
+     LOO       = !charend('/') !default("Y") /
      ByVars    = !charend('/') !default("")  /
      ViewCod   = !charend('/') !default("Y") /
      QCStats   = !charend('/') !default("Y") /
@@ -57,67 +56,6 @@ set mprint=on  printback=on.
 set mprint=off printback=off.
 !ifend
 
-!if (!vfile !ne !null) !then
-
-* when specified, read file with variable classification.
-get data
- / type = xlsx
- / file = !quote(!concat(!unquote(!indir),"\",!unquote(!vfile),".xlsx"))
-  !if (!sheet !ne !null) !then / sheet = name !quote(!sheet) !ifend
- / datatypemin percentage = 100.
-
-select if (variable <> "").
-alter type catvar impmean usecrit (a1).
-recode catvar impmean usecrit ("Y","y" = "Y")(else = "").
-
-compute vseq = $casenum.
-format vseq (f3.0).
-save translate
-  / outfile= !quote(!concat(!unquote(!outdir),"\",!vfile,"_",!sheet,"_VarList.csv"))
-  / replace  / type = csv
-  / keep = variable catvar impmean usecrit
-  / fieldnames / encoding = 'LOCALE'.
-execute.
-compute k = 1.
-match files
- / file = * / first = fvariable / last = lvariable
- / by k.
-string front back (a24).
-if (fvariable <>1) front = '              '.
-if (lvariable <>1) back  = '              '.
-if (lvariable = 1) back  = '   !enddefine.'.
-
-alter type catvar impmean usecrit (a32).
-if (catvar  = "Y") catvar  = variable.
-if (impmean = "Y") impmean = variable.
-if (usecrit = "Y") usecrit = variable.
-
-if (fvariable = 1) front = 'define !ctvr () '.
-write outfile = !quote(!concat(!unquote(!outdir),"\ctvr.tmp"))
- / 1 front catvar back.
-if (fvariable = 1) front = 'define !imvr () '.
-write outfile = !quote(!concat(!unquote(!outdir),"\imvr.tmp"))
- / 1 front impmean back.
-if (fvariable = 1) front = 'define !ucvr () '.
-write outfile = !quote(!concat(!unquote(!outdir),"\ucvr.tmp"))
- / 1 front usecrit back.
-execute.
-!onexpand.
-include file = !quote(!concat(!unquote(!outdir),"\ctvr.tmp")).
-include file = !quote(!concat(!unquote(!outdir),"\imvr.tmp")).
-include file = !quote(!concat(!unquote(!outdir),"\ucvr.tmp")).
-execute.
-
-!if (!upcase(!clean) = Y) !then
-erase file = !quote(!concat(!unquote(!outdir),"\ctvr.tmp")).
-erase file = !quote(!concat(!unquote(!outdir),"\imvr.tmp")).
-erase file = !quote(!concat(!unquote(!outdir),"\ucvr.tmp")).
-!ifend
-
-!ifend
-
-
-
 !let !byvarsR = k
 !do !bv !in(!byvars)
 !let !byvarsR = !concat(!bv,!blank(1),!byvarsR)
@@ -128,7 +66,7 @@ OMS  /SELECT ALL
      /DESTINATION VIEWER=NO.
 
 * Assing variables .
-!if (!vfile !ne !null) !then
+!if (!upcase(!vfile) !eq Y) !then
 !let !fcatvars = !upcase(!eval(!ctvr))
 !let !fimpmean = !upcase(!eval(!imvr))
 !let !fusecrit = !upcase(!eval(!ucvr))
@@ -143,9 +81,9 @@ get file = !quote(!concat(!unquote(!indir),"\",!infile,".sav"))
 compute k = 1.
 compute CaseSeq = $casenum.
 
- !if (!selcrit !ne !null) !then
+!if (!selcrit !ne !null) !then
 select if (!selcrit).
- !ifend
+!ifend
 
 sort cases by !tail(!ByVarsR) !head(!ByVarsR).
 
@@ -233,38 +171,57 @@ execute.
 
 * Process the USECRIT variables.
 !if (!fusecrit !ne !null !and !critvar !ne !null) !then
+
 weight by !wgt.
-* this in case these are missing cases.
-aggregate outfile = * mode = addvariables
-  / break = k !byvars
-  / !concat(!critvar,"_x") = mean(!critvar).
 !do !v !in(!fusecrit)
+
 aggregate outfile = * mode = addvariables
-  / break = k !byvars !v
-  / !upcase(!concat(!v,"_x")) = mean(!critvar).
+  / break = !v !tail(!byvarsR)
+  / !concat(!critvar,"_",!v,"_x") = mean(!critvar).
+temporary.
+select if (not(missing(!critvar))).
+aggregate outfile = !quote(!concat(!unquote(!outdir),"\",!v,".tmp"))
+  / break = !v !byvarsR
+  / !concat(!v,"_x") = mean(!critvar)
+  / !concat(!v,"_sw") = n(!critvar).
+sort cases by !v !byvarsR.
+match files 
+  / file = *
+  / table = !quote(!concat(!unquote(!outdir),"\",!v,".tmp"))
+  / by = !v !byvarsR.
+execute.
 !doend
+
 weight off.
+
 save outfile = !quote(!concat(!unquote(!outdir),"\",!outfile,"_Contrasts.sav")).
 
-*  Create the recode syntax.
+echo "Create the recode syntax".
 temporary.
 select if ($casenum = 1).
 write outfile = !quote(!concat(!unquote(!outdir),"\",!outfile,"_UseCritRecodes.txt"))
  !do !v !in(!fusecrit)
-  / !quote(!concat("recode ",!v," (sysmis = -999)(else = copy) into ",!upcase(!v),"_n.")) 
+  / !quote(!concat("autorecode ",!v," / into ",!upcase(!v),"_n."))
  !doend
-  /
+
  !do !v !in(!fusecrit)
   / !quote(!concat("compute ",!upcase(!v),"_1 = ",!v,"_x."))
+
+   !if (!upcase(!loo) = Y) !then
+  / !quote(!concat("do if (not(missing(",!upcase(!critvar),")) and ((",!v,"_sw - ",!wgt,") > 0))."))
+  / !quote(!concat("compute ",!upcase(!v),"_1 = ((",!v,"_x * ", !v,"_sw) - (",!critvar," * ",!wgt,")) / (",!v,"_sw -",!wgt,")."))
+  / !quote(!concat("end if."))
+   !ifend
+
   / !quote(!concat("compute ",!upcase(!v),"_2 = 0."))
   / !quote(!concat("do if (missing(",!upcase(!v),"_1))."))
-  / !quote(!concat("compute ",!upcase(!v),"_1 = ",!critvar,"_x."))
+  / !quote(!concat("compute ",!upcase(!v),"_1 = ",!critvar,"_",!v,"_x."))
   / !quote(!concat("compute ",!upcase(!v),"_2 = 1."))
   / !quote("end if.")
- !doend .
+ !doend.
 execute.
 
-* Write out the USECRIT variables.
+echo "Write out the USECRIT variables".
 temporary.
 select if ($casenum=1).
 write outfile = !quote(!concat(!unquote(!outdir),"\",!outfile,"_UseCritVars.txt"))
@@ -274,7 +231,7 @@ write outfile = !quote(!concat(!unquote(!outdir),"\",!outfile,"_UseCritVars.txt"
  !doend.
 execute.
 
-* Create the check syntax.
+echo "Create the check syntax for USECRIT variables".
 temporary.
 select if ($casenum = 1).
 write outfile = !quote(!concat(!unquote(!outdir),"\",!outfile,"_UseCritRecodesCheck.txt"))
@@ -566,21 +523,29 @@ sort cases by caseseq.
 save outfile = !quote(!concat(!unquote(!outdir),"\",!outfile,"_Contrasts.sav"))
   / keep = CaseSeq !idvars !keepvars !byvars !wgtvar.
 
+* save translate outfile = !quote(!concat(!unquote(!outdir),"\",!outfile,"_Contrasts_all.csv"))
+  / type = csv / fieldnames / replace / encoding = 'LOCALE'.
+
 add files
  / file = *
- / drop = k !do !c !in (!fcatvars) !concat(!c,"_n")                  !doend !fcatvars
-            !do !u !in (!fusecrit) !concat(!u,"_n") !concat(!u,"_x") !doend !fusecrit 
-            !do !i !in (!fimpmean) !concat(!i,"_n") !concat(!i,"_x") !doend !fimpmean 
-  !if (!fusecrit !ne !null !and !critvar !ne !null) !then !concat(!critvar,"_x") !ifend .
+ / drop = k !do !c !in (!fcatvars) !concat(!c,"_n")                                    !doend !fcatvars
+            !do !u !in (!fusecrit) !concat(!u,"_n") !concat(!u,"_x") !concat(!u,"_sw") !concat(!critvar,"_",!u,"_x") !doend !fusecrit 
+            !do !i !in (!fimpmean) !concat(!i,"_n") !concat(!i,"_x")                   !doend !fimpmean .
 
 match files 
   / file = !quote(!concat(!unquote(!outdir),"\",!outfile,"_Contrasts.sav"))
   / file = *
     / by CaseSeq.
 
-save outfile = !quote(!concat(!unquote(!outdir),"\",!outfile,"_Contrasts.sav")).
+* These so that i will not need to check the first and last variable in the list.
+compute FirstVar = 1.
+compute LastVar = 1.
+
+save outfile = !quote(!concat(!unquote(!outdir),"\",!outfile,"_Contrasts.sav"))
+  / keep = CaseSeq !idvars !keepvars !byvars !wgtvar !wgt !critvar FirstVar ALL LastVar.
 save translate outfile = !quote(!concat(!unquote(!outdir),"\",!outfile,"_Contrasts.csv"))
-  / type = csv / fieldnames / replace / encoding = 'LOCALE'.
+  / type = csv / fieldnames / replace / encoding = 'LOCALE' 
+  / keep = CaseSeq !idvars !keepvars !byvars !wgtvar !wgt !critvar FirstVar ALL LastVar.
 
 
 * Create list of UseCrit and ImpMean variables.
@@ -676,7 +641,96 @@ erase file = !quote(!concat(!unquote(!outdir),"\",!outfile,"_Interactions.sav"))
 erase file = !quote(!concat(!unquote(!outdir),"\",!outfile,"_RecodedVars.sav")).
 
 !ifend
+
+output save
+  outfile= !quote(!concat(!unquote(!outdir),"\",!outfile,"_Output.spv"))
+  lock = no.
+
+output export
+  / contents export=visible layers=printsetting modelviews=printsetting
+  / html documentfile = !quote(!concat(!unquote(!outdir),"\",!outfile,"_Output.htm"))
+    notescaptions=yes interactlayers=no styling=yes imageformat=jpg
+  / jpg percentsize=100 grayscale=no.
+
 new file.
+
+restore.
+
+!enddefine.
+
+
+*******************************************.
+* macro to get variable information       *.
+*******************************************.
+define !getvfile ( idir         = !charend('/') /
+                   vfile        = !charend('/') /
+                   sheet        = !charend('/') !default("") /
+                   odir         = !charend('/') /
+                   clean        = !charend('/') !default(Y)  /
+                   viewcod      = !charend('/') !default(N)  ).
+
+preserve.
+* If viewcode is selected.
+!if (!upcase(!viewcod)=Y) !then
+set mprint=on  printback=on.
+!else
+set mprint=off printback=off.
+!ifend
+
+* when specified, read file with variable classification.
+get data
+ / type = xlsx
+ / file = !quote(!concat(!unquote(!idir),"\",!unquote(!vfile),".xlsx"))
+  !if (!sheet !ne !null) !then / sheet = name !quote(!sheet) !ifend
+ / datatypemin percentage = 100.
+
+select if (variable <> "").
+alter type catvar impmean usecrit (a1).
+recode catvar impmean usecrit ("Y","y" = "Y")(else = "").
+
+compute vseq = $casenum.
+format vseq (f3.0).
+save translate
+  / outfile= !quote(!concat(!unquote(!odir),"\",!vfile,"_",!sheet,"_VarList.csv"))
+  / replace  / type = csv
+  / keep = variable catvar impmean usecrit
+  / fieldnames / encoding = 'LOCALE'.
+execute.
+compute k = 1.
+match files
+ / file = * / first = fvariable / last = lvariable
+ / by k.
+string front back (a24).
+if (fvariable <>1) front = '              '.
+if (lvariable <>1) back  = '              '.
+if (lvariable = 1) back  = concat('   !','enddefine.').
+
+alter type catvar impmean usecrit (a32).
+if (catvar  = "Y") catvar  = variable.
+if (impmean = "Y") impmean = variable.
+if (usecrit = "Y") usecrit = variable.
+
+if (fvariable = 1) front = concat('define !','ctvr () ').
+write outfile = !quote(!concat(!unquote(!odir),"\ctvr.tmp"))
+ / 1 front catvar back.
+if (fvariable = 1) front = concat('define !','imvr () ').
+write outfile = !quote(!concat(!unquote(!odir),"\imvr.tmp"))
+ / 1 front impmean back.
+if (fvariable = 1) front = concat('define !','ucvr () ').
+write outfile = !quote(!concat(!unquote(!odir),"\ucvr.tmp"))
+ / 1 front usecrit back.
+execute.
+!onexpand.
+include file = !quote(!concat(!unquote(!odir),"\ctvr.tmp")).
+include file = !quote(!concat(!unquote(!odir),"\imvr.tmp")).
+include file = !quote(!concat(!unquote(!odir),"\ucvr.tmp")).
+execute.
+
+!if (!upcase(!clean) = Y) !then
+erase file = !quote(!concat(!unquote(!odir),"\ctvr.tmp")).
+erase file = !quote(!concat(!unquote(!odir),"\imvr.tmp")).
+erase file = !quote(!concat(!unquote(!odir),"\ucvr.tmp")).
+!ifend
 
 restore.
 
