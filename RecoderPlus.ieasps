@@ -21,6 +21,7 @@ define !RecoderPlus
      infile    = !charend('/') !default("")  /
      outdir    = !charend('/') !default("")  /
      outfile   = !charend('/') !default("")  /
+     selvar    = !charend('/') !default("")  /
      SelCrit   = !charend('/') !default("")  /
      wgtvar    = !charend('/') !default("")  /
      IDVars    = !charend('/') !default("")  /
@@ -34,11 +35,14 @@ define !RecoderPlus
      UseCrit   = !charend('/') !default("")  /
      Critvar   = !charend('/') !default("")  /
      KeepVars  = !charend('/') !default("")  /
+     writecsv  = !charend('/') !default(Y)  /
+     writehtm  = !charend('/') !default(Y)  /
      LOO       = !charend('/') !default("Y") /
      ByVars    = !charend('/') !default("")  /
      ViewCod   = !charend('/') !default("Y") /
      QCStats   = !charend('/') !default("Y") /
-     Clean     = !charend('/') !default("N") ).
+     Clean     = !charend('/') !default("N") /
+     delsav    = !charend('/') !default("N") ).
 
 preserve.
 
@@ -46,8 +50,8 @@ set ovars=name tvars=name.
 
 new file.
 dataset close all.
-output close name = !unquote(!infile).
-output new name = !unquote(!infile).
+output close *.
+output new name = !unquote(!outfile).
 
 * If viewcode is selected.
 !if (!upcase(!viewcod)=Y) !then
@@ -77,7 +81,7 @@ OMS  /SELECT ALL
 !ifend
 
 get file = !quote(!concat(!unquote(!indir),"\",!infile,".sav"))
-  / keep = !idvars !byvars !wgtvar !fcatvars !fimpmean !fusecrit !critvar !keepvars.
+  / keep = !idvars !selvar !byvars !wgtvar !fcatvars !fimpmean !fusecrit !critvar !keepvars.
 compute k = 1.
 compute CaseSeq = $casenum.
 
@@ -543,10 +547,11 @@ compute LastVar = 1.
 
 save outfile = !quote(!concat(!unquote(!outdir),"\",!outfile,"_Contrasts.sav"))
   / keep = CaseSeq !idvars !keepvars !byvars !wgtvar !wgt !critvar FirstVar ALL LastVar.
+!if (!upcase(!writecsv) = Y) !then
 save translate outfile = !quote(!concat(!unquote(!outdir),"\",!outfile,"_Contrasts.csv"))
   / type = csv / fieldnames / replace / encoding = 'LOCALE' 
   / keep = CaseSeq !idvars !keepvars !byvars !wgtvar !wgt !critvar FirstVar ALL LastVar.
-
+!ifend
 
 * Create list of UseCrit and ImpMean variables.
 !if (!fimpmean !ne !null) !then
@@ -603,11 +608,13 @@ output save
   outfile= !quote(!concat(!unquote(!outdir),"\",!outfile,"_Output.spv"))
   lock = no.
 
+!if (!upcase(!writehtm) = Y) !then
 output export
   / contents export=visible layers=printsetting modelviews=printsetting
   / html documentfile = !quote(!concat(!unquote(!outdir),"\",!outfile,"_Output.htm"))
     notescaptions=yes interactlayers=no styling=yes imageformat=jpg
   / jpg percentsize=100 grayscale=no.
+!ifend
 
 new file.
 
@@ -652,6 +659,12 @@ output export
     notescaptions=yes interactlayers=no styling=yes imageformat=jpg
   / jpg percentsize=100 grayscale=no.
 
+
+!if (!upcase(!delsav) = Y) !then
+erase file = !quote(!concat(!unquote(!outdir),"\",!outfile,"_Contrasts.sav")).
+!ifend
+
+
 new file.
 
 restore.
@@ -691,7 +704,7 @@ recode catvar impmean usecrit ("Y","y" = "Y")(else = "").
 compute vseq = $casenum.
 format vseq (f3.0).
 save translate
-  / outfile= !quote(!concat(!unquote(!odir),"\",!vfile,"_",!sheet,"_VarList.csv"))
+  / outfile= !quote(!concat(!unquote(!odir),"\",!unquote(!vfile),"_",!sheet,"_VarList.csv"))
   / replace  / type = csv
   / keep = variable catvar impmean usecrit
   / fieldnames / encoding = 'LOCALE'.
